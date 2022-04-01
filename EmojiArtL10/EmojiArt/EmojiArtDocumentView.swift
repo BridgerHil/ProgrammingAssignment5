@@ -15,10 +15,35 @@ struct EmojiArtDocumentView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            documentBody
+			ZStack(alignment: .topLeading) {
+				documentBody
+				deleteEmojiButton.padding(.vertical).transition(.opacity)
+			}
             palette
         }
     }
+	
+	@ViewBuilder
+	private var deleteEmojiButton: some View {
+		if !selectedEmojis.isEmpty {
+			Button{
+				withAnimation {
+					for emoji in selectedEmojis {
+						document.removeEmoji(emoji)
+					}
+					selectedEmojis.removeAll()
+				}
+			} label: {
+				Text("Delete Selected Emojis")
+					.font(.title2.bold())
+					.foregroundColor(.black)
+					.padding(7)
+					.background(RoundedRectangle(cornerRadius: 10))
+					.foregroundColor(.red)
+			}
+			.padding(.horizontal)
+		}
+	}
     
     var documentBody: some View {
         GeometryReader { geometry in
@@ -39,13 +64,14 @@ struct EmojiArtDocumentView: View {
                             .scaleEffect(scale(for: emoji))
                             .scaleEffect(zoomScale)
                             .position(position(for: emoji, in: geometry))
-                            .offset(selectedEmojis.containsMatch(emoji) ? gestureEmojiPanOffset: .zero)
+                            .offset(selectedEmojis.containsMatch(emoji) ? gestureEmojiPanOffset: gestureDragOffset)
                             .onTapGesture {
                                 withAnimation {
                                     selectedEmojis.toggleMatch(emoji)
                                 }
                             }
-                            .gesture(panGesture(for: emoji))
+                            .gesture(dragGesture(emoji: emoji))
+                            
                     }
                 }
             }
@@ -138,6 +164,7 @@ struct EmojiArtDocumentView: View {
     
     private func zoomGesture() -> some Gesture {
         MagnificationGesture()
+            //updates emoji and background on zoom
             .updating($gestureZoomScale) { latestGestureScale, gestureZoomScale, _ in
                 if selectedEmojis.isEmpty {
                     gestureZoomScale = latestGestureScale
@@ -145,13 +172,15 @@ struct EmojiArtDocumentView: View {
             }
             .updating($gestureEmojiZoomScale) { latestEmojiGestureScale, gestureEmojiZoomScale, _ in
                 if !selectedEmojis.isEmpty {
-                    steadyStateZoomScale = latestEmojiGestureScale
+                    gestureEmojiZoomScale = latestEmojiGestureScale
                 }
             }
             .onEnded { gestureScaleAtEnd in
                 if selectedEmojis.isEmpty {
                     steadyStateZoomScale *= gestureScaleAtEnd
-                } else {
+                    
+                }
+                else {
                     for emoji in selectedEmojis {
                         document.scaleEmoji(emoji, by: gestureScaleAtEnd)
                     }
@@ -177,18 +206,40 @@ struct EmojiArtDocumentView: View {
         }
     }
     
-    // MARK: - Panning
+    //MARK: - Dragging Unselected Emoji
     
-    @State private var steadyStatePanOffset: CGSize = CGSize.zero
-    @GestureState private var gesturePanOffset: CGSize = CGSize.zero
-    @GestureState private var gestureEmojiPanOffset: CGSize = .zero
+    @State private var steadyStateDragOffset: CGSize = CGSize.zero
+    @GestureState private var gestureDragOffset: CGSize = CGSize.zero
+    @GestureState private var emojiDragState = EmojiDragState()
     
-    private var panOffset: CGSize {
-        (steadyStatePanOffset + gesturePanOffset) * zoomScale
+    struct EmojiDragState {
+        var offset: CGSize = .zero
+        var emoji: EmojiArtModel.Emoji?
     }
-    
-    private func panGesture(for emoji: EmojiArtModel.Emoji? = nil) -> some Gesture {
-        if let emoji = emoji, selectedEmojis.containsMatch(emoji) {
+
+    //Extra credit attempt, it works, but visually other unselected emojis will move,
+    //but will revert back to their original position when the dragged unselected emoji is dropped
+    //The dragged unselected emoji then has the new position
+    private func dragGesture(emoji: EmojiArtModel.Emoji) -> some Gesture {
+        
+//        Couldn't grasp this yet, going to work with code past this
+//            DragGesture()
+//                .updating($emojiDragState) { latestDragValue, emojiDragState, _ in
+//                    emojiDragState.emoji = emoji
+//                    emojiDragState.offset = latestDragValue.translation
+//                }
+//                .onEnded { finalDragValue in
+//                    if selectedEmojis.containsMatch(emoji) {
+//                        for emoji in selectedEmojis {
+//                            document.moveEmoji(emoji, by: finalDragValue.translation / zoomScale)
+//                        }
+//                    } else {
+//                        document.moveEmoji(emoji, by: finalDragValue.translation / zoomScale)
+//                    }
+//                }
+        
+        
+        if selectedEmojis.containsMatch(emoji) {
             return DragGesture()
                 .updating($gestureEmojiPanOffset) { latestDragValue, gestureEmojiPanOffset, _ in
                     gestureEmojiPanOffset = latestDragValue.translation
@@ -200,13 +251,33 @@ struct EmojiArtDocumentView: View {
                 }
         } else {
             return DragGesture()
-                .updating($gesturePanOffset) { latestDragGestureValue, gesturePanOffset, _ in
+                .updating($gestureDragOffset) { latestDragValue, gestureDragOffset, _ in
+                    gestureDragOffset = latestDragValue.translation
+                }
+                .onEnded { finalDragValue in
+                    document.moveEmoji(emoji, by: finalDragValue.translation / zoomScale)
+                }
+        }
+    }
+    
+    // MARK: - Panning
+    
+    @State private var steadyStatePanOffset: CGSize = CGSize.zero
+    @GestureState private var gesturePanOffset: CGSize = CGSize.zero
+    @GestureState private var gestureEmojiPanOffset: CGSize = .zero
+    
+    private var panOffset: CGSize {
+        (steadyStatePanOffset + gesturePanOffset) * zoomScale
+    }
+    
+    private func panGesture() -> some Gesture {
+        return DragGesture()
+            .updating($gesturePanOffset) { latestDragGestureValue, gesturePanOffset, _ in
                     gesturePanOffset = latestDragGestureValue.translation / zoomScale
                 }
                 .onEnded { finalDragGestureValue in
                     steadyStatePanOffset = steadyStatePanOffset + (finalDragGestureValue.translation / zoomScale)
                 }
-        }
     }
 
     // MARK: - Palette
