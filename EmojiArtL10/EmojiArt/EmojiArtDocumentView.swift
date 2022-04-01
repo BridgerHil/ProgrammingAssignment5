@@ -15,10 +15,35 @@ struct EmojiArtDocumentView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            documentBody
+			ZStack(alignment: .topLeading) {
+				documentBody
+				deleteEmojiButton.padding(.vertical).transition(.opacity)
+			}
             palette
         }
     }
+	
+	@ViewBuilder
+	private var deleteEmojiButton: some View {
+		if !selectedEmojis.isEmpty {
+			Button{
+				withAnimation {
+					for emoji in selectedEmojis {
+						document.removeEmoji(emoji)
+					}
+					selectedEmojis.removeAll()
+				}
+			} label: {
+				label("Delete Selected Emojis")
+					.font(.title2.bold())
+					.foregroundColor(.black)
+					.padding(7)
+					.background(RoundedRectangle(cornerRadius: 10))
+					.foregroundColor(.red)
+			}
+			.padding(.horizontal)
+		}
+	}
     
     var documentBody: some View {
         GeometryReader { geometry in
