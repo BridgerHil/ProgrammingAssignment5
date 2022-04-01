@@ -38,7 +38,7 @@ struct EmojiArtModel {
     }
 	
 	mutating func removeEmoji(_ emoji: Emoji) {
-		if let index = emoji.index(matching: emoji) {
+        if let index = emojis.index(matching: emoji) {
 			emojis.remove(at: index)
 		}
 	}
